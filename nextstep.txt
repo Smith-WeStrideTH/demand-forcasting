@@ -1,0 +1,138 @@
+สิ่งที่ควรทำต่อหลัง “ทำ MLOps ครบวงจร” แล้ว
+1) Production monitoring ที่จับ Drift ได้จริง
+
+คุณ ingest evaluation artifacts ลง Athena ได้แล้ว ต่อไปต้องทำให้ “ใช้ได้จริง” (actionable):
+
+สร้างงาน monitoring รายวัน/รายสัปดาห์ (แยกจาก retraining):
+
+ดึงข้อมูล production ของเมื่อวาน (หรือช่วง rolling window) จาก Athena/S3
+
+ยิง endpoint ที่ deploy อยู่ (หรือ batch scoring) เพื่อได้ prediction
+
+คำนวณ:
+
+Performance proxy (ถ้า label มาช้า ให้ใช้ label ที่มาทีหลัง เช่น delayed labels)
+
+Data drift (distribution ของ feature เปลี่ยนไปไหม)
+
+Prediction drift (distribution ของ prediction เปลี่ยนไปไหม)
+
+Bias drift (facet metrics เช่น weekend/weekday เปลี่ยนไปไหม)
+
+เขียนผลกลับเข้า Athena tables เดิมที่คุณสร้างไว้
+
+จากนั้น:
+
+ทำ QuickSight dashboard (time series ของ RMSE, bias metrics, ค่าเฉลี่ย/quantile ของ feature ฯลฯ)
+
+ตั้ง Alert:
+
+CloudWatch Alarm + SNS (หรือส่งเข้า Slack) เมื่อค่าเกิน threshold
+
+2) Schedule & Triggers (ทำให้รันอัตโนมัติ)
+
+วางตารางรัน 2 แบบ:
+
+Monitoring schedule: รายวัน (ถูกและใช้ sample เล็ก ๆ ก็พอ)
+
+Retraining schedule: รายสัปดาห์/รายเดือน หรือ trigger เมื่อ drift เกิน threshold
+
+วิธีทำ:
+
+EventBridge schedule → StartPipelineExecution สำหรับ monitoring / retraining pipeline
+
+หรือใช้ Lambda trigger retraining เมื่อระบบตรวจพบ drift สูง
+
+3) Safe deploy guardrails (Blue/Green / Canary)
+
+ตอนนี้ flow “Approved → update endpoint” ดีแล้ว แต่ควรเพิ่มความปลอดภัย:
+
+Deploy โมเดลใหม่ไป staging endpoint ก่อน
+
+ทำ smoke test (10–100 requests) แล้วตรวจ:
+
+รูปแบบ response ถูกต้อง
+
+latency อยู่ในกรอบ
+
+sanity check (prediction ไม่ติดลบ/ไม่หลุดช่วงแบบผิดปกติ)
+
+ถ้าผ่าน → update production endpoint
+
+ถ้าไม่ผ่าน → แจ้งเตือน + หยุด deploy
+
+ทำได้ด้วย Step Functions หรือ Lambda + ขั้นตอนเพิ่มเล็กน้อย
+
+4) Cost control & Cleanup
+
+Serverless + Pipelines มักทิ้ง resource และไฟล์ไว้เยอะ:
+
+ทำ cleanup policy อัตโนมัติ:
+
+ลบ endpoint config / model เก่า (เก็บไว้แค่ N รุ่นล่าสุด)
+
+ลบ/expire โฟลเดอร์ Athena query output เก่า
+
+ตั้ง S3 lifecycle rule สำหรับ prefix ต่าง ๆ (evaluation artifacts, staging)
+
+ติดตาม cost:
+
+ใส่ tag ให้ model/endpoint/pipeline execution
+
+ทำ cost allocation ตาม tag
+
+5) Security & Governance
+
+เมื่อระบบใกล้ production แล้ว ควร tighten security:
+
+ปรับ IAM ให้แคบลง:
+
+จำกัด Lambda permission ให้เฉพาะ resource ที่จำเป็น (endpoint name, model package group)
+
+จำกัด iam:PassRole ให้ใช้ได้เฉพาะ SageMaker execution role
+
+Lock down S3:
+
+bucket policy
+
+encryption (SSE-S3 หรือ SSE-KMS)
+
+ทำ audit:
+
+เปิด CloudTrail เพื่อ track event การ approve และ deploy
+
+6) Feature consistency สำหรับ streaming inference
+
+ถ้าคุณกำลังจะไป Kinesis/Lambda streaming:
+
+ทำ feature contract ชุดเดียวให้ทั้งระบบ:
+
+รายชื่อ feature + ลำดับ (order) ที่แน่นอน
+
+type coercion (int/float) ที่ชัดเจน
+
+default values สำหรับ feature ที่หายไป
+
+ทำ validation เข้มใน Lambda:
+
+record ผิดรูปแบบ → drop หรือส่งไป quarantine
+
+ทำ versioning ของ schema (เช่น feature_schema_version)
+
+7) CI/CD สำหรับ ML code
+
+ตอนนี้ยัง notebook-driven อยู่ ขั้นต่อไปคือทำให้ deploy pipeline ได้แบบ software จริง:
+
+ย้าย script เข้า repo (Git) พร้อม:
+
+unit tests สำหรับ preprocessing และ feature order
+
+linting + type checks
+
+ทำ CI pipeline:
+
+run tests ทุกครั้งที่ push
+
+package pipeline definition
+
+deploy/update SageMaker Pipeline อัตโนมัติ
