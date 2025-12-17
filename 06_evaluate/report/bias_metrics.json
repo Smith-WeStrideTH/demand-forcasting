@@ -1,0 +1,21 @@
+{
+  "threshold_units_sold": 136.0,
+  "group_a_value": 0.0,
+  "group_d_value": 1.0,
+  "group_a_n": 17,
+  "group_a_pos_rate_true": 0.0,
+  "group_a_pos_rate_pred": 0.0,
+  "group_a_recall": NaN,
+  "group_a_precision": NaN,
+  "group_a_accuracy": 1.0,
+  "group_d_n": 8,
+  "group_d_pos_rate_true": 0.625,
+  "group_d_pos_rate_pred": 0.375,
+  "group_d_recall": 0.6,
+  "group_d_precision": 1.0,
+  "group_d_accuracy": 0.75,
+  "DPL_labels": -0.625,
+  "DPPL_predicted": -0.375,
+  "RD_recall_diff": NaN,
+  "AD_accuracy_diff": 0.25
+}
